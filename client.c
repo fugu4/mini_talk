@@ -1,51 +1,56 @@
-#include "minitalk.h"
-
-void	send_char(int pid, char c)
+static void	ack_handler(int sig)
 {
-	int	bit;
-	int	i;
+	(void)sig;
+	g_ack = 1;
+}
 
-	i = 7;
-	while (i >= 0)
+void	send_char(pid_t pid, unsigned char c)
+{
+	int	i;
+	int	timeout;
+
+	i = 8;
+	while (i--)
 	{
-		bit = (c >> i) & 1;
-		if (bit == 1)
+		g_ack = 0;
+		if (c >> i & 1)
 			kill(pid, SIGUSR2);
 		else
 			kill(pid, SIGUSR1);
-		usleep(300);
-		i--;
+		
+		timeout = 0;
+		while (g_ack == 0 && timeout < 1000)
+		{
+			usleep(100);
+			timeout++;
+		}
+		if (timeout >= 1000)
+		{
+			ft_printf("Error: Server timeout\n");
+			exit(1);
+		}
 	}
-}
-
-void	send_string(int pid, char *str)
-{
-	int	i;
-
-	i = 0;
-	while (str[i])
-	{
-		send_char(pid, str[i]);
-		i++;
-	}
-	send_char(pid, '\0');
 }
 
 int	main(int argc, char **argv)
 {
-	int	pid;
+	struct sigaction	sa;
+	pid_t				pid;
+	int					i;
 
 	if (argc != 3)
-	{
-		ft_printf("Usage: ./client <PID> <string>\n");
-		return (1);
-	}
-	pid = ft_atoi(argv[1]);
-	if (pid <= 0 || kill(pid, 0) == -1)
-	{
-		ft_printf("Error: Invalid PID\n");
-		return (1);
-	}
-	send_string(pid, argv[2]);
+		return (ft_printf("Usage: ./client <PID> <message>\n"), 1);
+	pid = (pid_t)ft_atoi(argv[1]);
+	
+	sigemptyset(&sa.sa_mask);
+	sa.sa_handler = ack_handler;
+	sa.sa_flags = 0;
+	sigaction(SIGUSR1, &sa, NULL);
+	
+	i = -1;
+	while (argv[2][++i])
+		send_char(pid, argv[2][i]);
+	send_char(pid, '\0');
+	ft_printf("Message sent successfully!\n");
 	return (0);
 }

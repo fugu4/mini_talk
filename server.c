@@ -1,37 +1,46 @@
 #include "minitalk.h"
+#include <stdio.h>
 
-void	signal_handler(int signal)
+static void	handle_sig(int sig, siginfo_t *info, void *ucontext)
 {
-	static int	bit_count = 0;
-	static int	character = 0;
+	static int		bit = 0;
+	static int		c = 0;
 
-	if (signal == SIGUSR1)
-		character <<= 1;
-	else if (signal == SIGUSR2)
-		character = (character << 1) | 1;
-	bit_count++;
-	if (bit_count == 8)
+	(void)ucontext;
+	if (sig == SIGUSR2)
+		c |= (1 << (7 - bit));
+	bit++;
+	if (bit == 8)
 	{
-		if (character == 0)
-			ft_printf("\n");
+		if (c)
+			write(1, &c, 1);
 		else
-			ft_printf("%c", character);
-		bit_count = 0;
-		character = 0;
+			write(1, "\n", 1);
+		bit = 0;
+		c = 0;
 	}
+	if (info && info->si_pid > 0)
+		kill(info->si_pid, SIGUSR1);
 }
 
 int	main(void)
 {
 	struct sigaction	sa;
 
-	ft_printf("Server PID: %d\n", getpid());
-	sa.sa_handler = signal_handler;
 	sigemptyset(&sa.sa_mask);
-	sa.sa_flags = 0;
-	sigaction(SIGUSR1, &sa, NULL);
-	sigaction(SIGUSR2, &sa, NULL);
+	sa.sa_sigaction = handle_sig;
+	sa.sa_flags = SA_SIGINFO;
+	if (sigaction(SIGUSR1, &sa, NULL) == -1)
+	{
+		perror("sigaction");
+		exit(EXIT_FAILURE);
+	}
+	if (sigaction(SIGUSR2, &sa, NULL) == -1)
+	{
+		perror("sigaction");
+		exit(EXIT_FAILURE);
+	}
+	ft_printf("Server PID: %d\n", getpid());
 	while (1)
 		pause();
-	return (0);
 }
